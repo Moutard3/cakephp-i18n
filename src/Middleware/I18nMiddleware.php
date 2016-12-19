@@ -21,14 +21,14 @@ class I18nMiddleware
      *
      * - `detectLanguage`: If `true` will attempt to get browser locale and
      *   redirect to similar language available in app when going to site root.
-     *   Default `true`.
+     *   Default `false`.
      * - `defaultLanguage`: Default language for app. Default `en_US`.
      * - `languages`: Languages available in app. Default `[]`.
      *
      * @var array
      */
     protected $_defaultConfig = [
-        'detectLanguage' => true,
+        'detectLanguage' => false,
         'defaultLanguage' => 'en_US',
         'languages' => [],
     ];
@@ -59,28 +59,34 @@ class I18nMiddleware
      */
     public function __invoke(ServerRequestInterface $request, ResponseInterface $response, $next)
     {
-        $config = $this->config();
         $url = $request->getUri()->getPath();
 
-        if ($url === '/') {
+        if ($url === '' || $url === '/' || (empty($request->getAttribute('params')['plugin']) && empty($request->getAttribute('params')['lang']))) {
             $statusCode = 301;
-            $lang = $config['defaultLanguage'];
-            if ($config['detectLanguage']) {
+            $lang = $this->_config['defaultLanguage'];
+            if ($this->_config['detectLanguage']) {
                 $statusCode = 302;
                 $lang = $this->detectLanguage($request, $lang);
             }
 
-            $response = new RedirectResponse(
-                $request->getAttribute('webroot') . $lang,
-                $statusCode
-            );
+            if(empty($request->getAttribute('params')['prefix'])) {
+                $response = new RedirectResponse(
+                    $request->getAttribute('webroot') . $lang . (!empty($url) ? '/' . trim($url, '/') : ''),
+                    $statusCode
+                );
+            } else {
+                $response = new RedirectResponse(
+                    $request->getAttribute('webroot') . $request->getAttribute('params')['prefix'] . '/' . $lang . '/' . substr($url, strlen($request->getAttribute('params')['prefix'])+2),
+                    $statusCode
+                );
+            }
 
             return $response;
         }
 
-        $langs = $config['languages'];
+        $langs = $this->_config['languages'];
         $requestParams = $request->getAttribute('params');
-        $lang = isset($requestParams['lang']) ? $requestParams['lang'] : $config['defaultLanguage'];
+        $lang = isset($requestParams['lang']) ? $requestParams['lang'] : $this->_config['defaultLanguage'];
         if (isset($langs[$lang])) {
             I18n::locale($langs[$lang]['locale']);
         } else {
